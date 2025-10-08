@@ -58,7 +58,8 @@ def process_financial_data(df):
 def get_initial_ai_analysis(data_for_ai):
     """Gửi dữ liệu phân tích đến Gemini API và nhận nhận xét ban đầu."""
     try:
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        # THAY ĐỔI: Chuyển sang model 'gemini-pro' để ổn định hơn
+        model = genai.GenerativeModel('gemini-pro')
         prompt = f"""
         Bạn là một chuyên gia phân tích tài chính chuyên nghiệp. Dựa trên các chỉ số tài chính sau, hãy đưa ra một nhận xét khách quan, ngắn gọn (khoảng 3-4 đoạn) về tình hình tài chính của doanh nghiệp. Đánh giá tập trung vào tốc độ tăng trưởng, thay đổi cơ cấu tài sản và khả năng thanh toán hiện hành.
         
@@ -155,7 +156,8 @@ if uploaded_file is not None:
 
             # Khởi tạo model chat và lịch sử trò chuyện trong session state
             if "chat_model" not in st.session_state:
-                st.session_state.chat_model = genai.GenerativeModel('gemini-1.5-flash')
+                # THAY ĐỔI: Chuyển sang model 'gemini-pro' để ổn định hơn
+                st.session_state.chat_model = genai.GenerativeModel('gemini-pro')
             if "chat_session" not in st.session_state:
                  # Bắt đầu cuộc trò chuyện với một context ban đầu về dữ liệu
                 initial_prompt = f"""
@@ -203,3 +205,4 @@ if uploaded_file is not None:
 
 else:
     st.info("Vui lòng tải lên file Excel để bắt đầu phân tích.")
+
