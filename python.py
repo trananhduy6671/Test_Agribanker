@@ -183,3 +183,96 @@ if uploaded_file is not None:
 
 else:
     st.info("Vui lòng tải lên file Excel để bắt đầu phân tích.")
+# ========================== KHUNG CHAT GEMINI (BỔ SUNG) ==========================
+# Bạn có thể đặt block này ở phía trên hoặc dưới cùng file. Mặc định mình đặt sau phần tính toán.
+with st.sidebar:
+    st.markdown("## 💬 Chat với Gemini")
+    st.caption("Hỏi đáp nhanh về số liệu, công thức, hoặc giải thích kết quả. Lịch sử chat chỉ tồn tại trong phiên hiện tại.")
+
+# Khởi tạo lịch sử chat trong session_state
+if "chat_messages" not in st.session_state:
+    st.session_state.chat_messages = [
+        {"role": "system", "content": (
+            "Bạn là một trợ lý tài chính nói tiếng Việt, am hiểu kế toán – kiểm toán – phân tích tài chính. "
+            "Giải thích ngắn gọn, đưa ra công thức khi phù hợp, có thể trích số liệu từ bảng nếu người dùng cung cấp."
+        )}
+    ]
+
+def _to_genai_contents(history: list, user_message: str):
+    """
+    Chuyển lịch sử hội thoại + câu hỏi mới về format contents cho Gemini.
+    'history' là list các dict: {'role': 'user'/'assistant'/'system', 'content': str}
+    """
+    contents = []
+    for msg in history:
+        # Map role sang định dạng Gemini
+        role = "user" if msg["role"] == "user" else ("model" if msg["role"] == "assistant" else "user")
+        # System message đưa như user prompt mở đầu
+        contents.append({"role": role, "parts": [msg["content"]]})
+    # Thêm câu hỏi mới
+    contents.append({"role": "user", "parts": [user_message]})
+    return contents
+
+def gemini_chat_reply(history: list, user_message: str, api_key: str) -> str:
+    """
+    Gửi hội thoại (history) + câu hỏi mới đến Gemini và trả về câu trả lời dạng text.
+    """
+    try:
+        client = genai.Client(api_key=api_key)
+        model_name = "gemini-2.5-flash"
+        contents = _to_genai_contents(history, user_message)
+        resp = client.models.generate_content(model=model_name, contents=contents)
+        return getattr(resp, "text", "").strip() or "Mình chưa nhận được nội dung phản hồi từ Gemini."
+    except APIError as e:
+        return f"Lỗi gọi Gemini API (chat): {e}"
+    except Exception as e:
+        return f"Đã xảy ra lỗi khi chat với Gemini: {e}"
+
+# KHU VỰC HIỂN THỊ CHAT (ở trang chính, không phải sidebar)
+st.divider()
+st.subheader("💬 Khung Chat hỏi đáp với Gemini")
+
+# Hiển thị lịch sử tin nhắn (bỏ qua 'system' để giao diện gọn hơn)
+for msg in st.session_state.chat_messages:
+    if msg["role"] == "system":
+        continue
+    with st.chat_message("assistant" if msg["role"] == "assistant" else "user"):
+        st.markdown(msg["content"])
+
+# Ô nhập chat
+user_input = st.chat_input("Nhập câu hỏi (ví dụ: 'Giải thích cách tính tỷ trọng năm sau?')")
+if user_input:
+    st.session_state.chat_messages.append({"role": "user", "content": user_input})
+
+    api_key = st.secrets.get("GEMINI_API_KEY")
+    if not api_key:
+        with st.chat_message("assistant"):
+            st.error("Chưa cấu hình `GEMINI_API_KEY` trong Secrets.")
+    else:
+        # Nếu người dùng đã tải file và có df_processed, bạn có thể cho phép tham chiếu nhanh
+        context_hint = ""
+        if "df_processed" in locals() and isinstance(df_processed, pd.DataFrame):
+            try:
+                # Rút gọn bối cảnh để chat thông minh hơn (tránh quá dài)
+                head_preview = df_processed.head(10).to_markdown(index=False)
+                context_hint = (
+                    "\n\n[Ngữ cảnh dữ liệu (preview 10 dòng đầu)]:\n" + head_preview +
+                    "\n\nHãy ưu tiên trích dẫn/giải thích dựa trên các cột: "
+                    "'Chỉ tiêu', 'Năm trước', 'Năm sau', 'Tốc độ tăng trưởng (%)', "
+                    "'Tỷ trọng Năm trước (%)', 'Tỷ trọng Năm sau (%)'."
+                )
+            except Exception:
+                context_hint = ""
+
+        # Gửi và nhận phản hồi
+        with st.chat_message("assistant"):
+            with st.spinner("Gemini đang trả lời..."):
+                reply = gemini_chat_reply(
+                    history=st.session_state.chat_messages,
+                    user_message=(user_input + context_hint),
+                    api_key=api_key
+                )
+                st.markdown(reply)
+        # Lưu phản hồi vào lịch sử
+        st.session_state.chat_messages.append({"role": "assistant", "content": reply})
+# ======================== HẾT KHUNG CHAT GEMINI (BỔ SUNG) ========================
